@@ -3,95 +3,197 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#D97757" />
-  <meta name="description" content="Administrador cálido de actividades y recordatorios personales con soporte offline." />
-  <title>Aura | Mis Actividades</title>
+  <meta name="theme-color" content="#7C5DFA" />
+  <meta name="description" content="Panel de actividades y recordatorios personales con soporte offline." />
+  <title>Mi Agenda | Recordatorios y Actividades</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="app-header">
-    <div class="header-content">
-      <div>
-        <h1>Aura</h1>
-        <p class="subtitle">Tu espacio tranquilo para organizar el día</p>
-      </div>
-      <div class="header-actions">
-        <span id="connection-badge" class="badge badge-online" aria-live="polite">En línea</span>
-        <button id="btn-notify-perm" class="btn btn-soft" type="button" title="Activar recordatorios">
-          🔔 Activar avisos
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <main class="container">
-    <!-- Banner de sincronización pendiente -->
-    <div id="sync-banner" class="sync-banner hidden" role="status">
-      <span>Tienes cambios guardados localmente esperando conexión para sincronizarse.</span>
-      <button id="btn-force-sync" class="btn btn-small" type="button">Sincronizar ahora</button>
-    </div>
-
-    <!-- Formulario CRUD (Crear / Editar) -->
-    <section class="card form-card" aria-labelledby="form-title">
-      <h2 id="form-title">Nueva actividad</h2>
-      <form id="activity-form">
-        <input type="hidden" id="activity-id" />
-        
-        <div class="form-group">
-          <label for="title">¿Qué tienes planeado?</label>
-          <input type="text" id="title" placeholder="Ej. Leer 20 páginas, llamar a mamá..." required />
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="datetime">Fecha y hora del recordatorio</label>
-            <input type="datetime-local" id="datetime" required />
-          </div>
-
-          <div class="form-group">
-            <label for="category">Categoría</label>
-            <select id="category">
-              <option value="Personal">🌿 Personal</option>
-              <option value="Estudio">📚 Estudio</option>
-              <option value="Trabajo">💼 Trabajo</option>
-              <option value="Salud">☀️ Bienestar</option>
-            </select>
+  <div class="backdrop-frame">
+    <div class="dashboard-shell">
+      <!-- Barra lateral izquierda -->
+      <aside class="sidebar">
+        <div class="profile-box">
+          <div class="avatar-mark">MA</div>
+          <div>
+            <div class="profile-name">Mi Agenda</div>
+            <div class="profile-sub">Espacio personal</div>
           </div>
         </div>
 
-        <div class="form-group">
-          <label for="notes">Notas adicionales (opcional)</label>
-          <textarea id="notes" rows="2" placeholder="Detalles pequeños para no olvidar..."></textarea>
-        </div>
+        <nav class="side-nav" aria-label="Navegación principal">
+          <button class="nav-item active" data-filter="all" type="button">
+            <span>🔔</span> Recordatorios <span id="badge-all" class="nav-pill">0</span>
+          </button>
+          <button class="nav-item" data-filter="pending" type="button">
+            <span>⏳</span> Pendientes <span id="badge-pending" class="nav-pill">0</span>
+          </button>
+          <button class="nav-item" data-filter="completed" type="button">
+            <span>✅</span> Completadas <span id="badge-completed" class="nav-pill">0</span>
+          </button>
+        </nav>
 
-        <div class="form-actions">
-          <button type="submit" id="btn-submit" class="btn btn-primary">Guardar actividad</button>
-          <button type="button" id="btn-cancel-edit" class="btn btn-ghost hidden">Cancelar edición</button>
+        <div class="side-status-card">
+          <div class="status-label">Estado de red</div>
+          <span id="connection-badge" class="badge badge-online" aria-live="polite">En línea</span>
+          <button id="btn-notify-perm" class="btn btn-soft-full" type="button">
+            🔔 Activar avisos
+          </button>
         </div>
-      </form>
-    </section>
+      </aside>
 
-    <!-- Lista de actividades -->
-    <section class="activities-section" aria-labelledby="list-title">
-      <div class="list-header">
-        <h2 id="list-title">Tus recordatorios</h2>
-        <div class="filters">
-          <button class="filter-btn active" data-filter="all">Todas</button>
-          <button class="filter-btn" data-filter="pending">Pendientes</button>
-          <button class="filter-btn" data-filter="completed">Completadas</button>
-        </div>
-      </div>
+      <!-- Contenido principal -->
+      <main class="main-panel">
+        <header class="top-bar">
+          <div>
+            <h1>Recordatorios y Actividades</h1>
+            <p id="current-date-label" class="muted-text"></p>
+          </div>
+          <div id="sync-banner" class="sync-inline hidden" role="status">
+            <span>Cambios pendientes de sync</span>
+            <button id="btn-force-sync" class="btn btn-mini" type="button">Sincronizar</button>
+          </div>
+        </header>
 
-      <div id="activities-list" class="activities-grid">
-        <!-- Las tarjetas se renderizan dinámicamente desde IndexedDB -->
-      </div>
-    </section>
-  </main>
+        <!-- Tarjetas de resumen (como "Today's Appointments") -->
+        <section class="metrics-section" aria-label="Resumen de actividades">
+          <h2 class="section-title">Resumen de hoy</h2>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-icon icon-mint">✅</div>
+              <div>
+                <div id="stat-completed" class="metric-num">0</div>
+                <div class="metric-label">Completadas</div>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-icon icon-amber">⏳</div>
+              <div>
+                <div id="stat-pending" class="metric-num">0</div>
+                <div class="metric-label">Pendientes</div>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-icon icon-rose">🔄</div>
+              <div>
+                <div id="stat-sync" class="metric-num">0</div>
+                <div class="metric-label">Por sincronizar</div>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-icon icon-blue">📋</div>
+              <div>
+                <div id="stat-total" class="metric-num">0</div>
+                <div class="metric-label">Total actividades</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tabla de actividades (como "Manage Custom Notifications") -->
+        <section class="table-section" aria-labelledby="table-heading">
+          <div class="section-header-row">
+            <div>
+              <h2 id="table-heading" class="section-title">Administrar actividades</h2>
+              <p class="muted-text small">Guardadas localmente en IndexedDB</p>
+            </div>
+            <button id="btn-clear-completed" class="link-btn" type="button">Limpiar completadas</button>
+          </div>
+
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Fecha y hora</th>
+                  <th>Actividad</th>
+                  <th>Categoría</th>
+                  <th>Notas</th>
+                  <th>Estado</th>
+                  <th class="th-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="activities-tbody">
+                <!-- Filas generadas dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Dos columnas inferiores: Formulario CRUD + Vista previa de recordatorio -->
+        <section class="bottom-grid">
+          <div class="panel-box">
+            <h2 id="form-title" class="box-title">Nueva actividad</h2>
+            <p class="muted-text small mb-1">Registra o edita un recordatorio personal</p>
+
+            <form id="activity-form">
+              <input type="hidden" id="activity-id" />
+
+              <div class="field">
+                <label for="title">Título de la actividad</label>
+                <input type="text" id="title" placeholder="Ej. Revisión médica, entregar tarea..." required />
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label for="datetime">Fecha y hora</label>
+                  <input type="datetime-local" id="datetime" required />
+                </div>
+
+                <div class="field">
+                  <label for="category">Categoría</label>
+                  <select id="category">
+                    <option value="Personal">Personal</option>
+                    <option value="Estudio">Estudio</option>
+                    <option value="Trabajo">Trabajo</option>
+                    <option value="Bienestar">Bienestar</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="notes">Notas / Contenido del aviso</label>
+                <textarea id="notes" rows="2" placeholder="Escribe un detalle o mensaje para tu recordatorio..."></textarea>
+              </div>
+
+              <div class="box-actions">
+                <button type="button" id="btn-preview" class="btn btn-outline">Vista previa</button>
+                <button type="submit" id="btn-submit" class="btn btn-primary">Guardar actividad</button>
+                <button type="button" id="btn-cancel-edit" class="btn btn-ghost hidden">Cancelar</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="panel-box preview-box">
+            <h2 class="box-title">Vista previa del recordatorio</h2>
+            <p class="muted-text small mb-1">Así se verá tu aviso cuando llegue la hora</p>
+
+            <div class="notif-mockup">
+              <div class="notif-mockup-header">
+                <span class="notif-dot"></span>
+                <strong>Mi Agenda • Notificación</strong>
+              </div>
+              <div id="preview-title" class="notif-mockup-title">Tu próxima actividad</div>
+              <div id="preview-body" class="notif-mockup-body">Selecciona una fecha y escribe un título para previsualizar el aviso.</div>
+              <div id="preview-meta" class="notif-mockup-meta">Categoría: Personal</div>
+            </div>
+
+            <div class="helper-tip">
+              💡 Tip: Puedes desconectar el internet en DevTools para probar el guardado offline y la sincronización automática.
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

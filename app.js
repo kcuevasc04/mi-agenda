@@ -1,6 +1,3 @@
-// ==========================================
-// 1. CONFIGURACIÓN DE INDEXEDDB
-// ==========================================
 const DB_NAME = 'AuraActivitiesDB';
 const DB_VERSION = 1;
 const STORE_ACTIVITIES = 'activities';
@@ -9,6 +6,9 @@ const STORE_SYNC_QUEUE = 'syncQueue';
 let db;
 let currentFilter = 'all';
 
+// ==========================================
+// 1. INDEXEDDB
+// ==========================================
 function initDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -32,14 +32,10 @@ function initDB() {
   });
 }
 
-// ==========================================
-// 2. OPERACIONES CRUD EN INDEXEDDB
-// ==========================================
 function saveActivityDB(activity) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction([STORE_ACTIVITIES], 'readwrite');
-    const store = tx.objectStore(STORE_ACTIVITIES);
-    const req = store.put(activity);
+    const req = tx.objectStore(STORE_ACTIVITIES).put(activity);
     req.onsuccess = () => resolve(activity);
     req.onerror = () => reject(req.error);
   });
@@ -48,8 +44,7 @@ function saveActivityDB(activity) {
 function getAllActivitiesDB() {
   return new Promise((resolve, reject) => {
     const tx = db.transaction([STORE_ACTIVITIES], 'readonly');
-    const store = tx.objectStore(STORE_ACTIVITIES);
-    const req = store.getAll();
+    const req = tx.objectStore(STORE_ACTIVITIES).getAll();
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
@@ -58,15 +53,14 @@ function getAllActivitiesDB() {
 function deleteActivityDB(id) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction([STORE_ACTIVITIES], 'readwrite');
-    const store = tx.objectStore(STORE_ACTIVITIES);
-    const req = store.delete(id);
+    const req = tx.objectStore(STORE_ACTIVITIES).delete(id);
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
   });
 }
 
 // ==========================================
-// 3. COLA DE SINCRONIZACIÓN (OFFLINE -> ONLINE)
+// 2. COLA DE SINCRONIZACIÓN
 // ==========================================
 async function enqueueSyncAction(action, payload) {
   const tx = db.transaction([STORE_SYNC_QUEUE], 'readwrite');
@@ -76,38 +70,33 @@ async function enqueueSyncAction(action, payload) {
     timestamp: Date.now()
   });
 
-  updateSyncBanner();
+  updateSyncUI();
 
-  // Registrar Background Sync si el navegador lo soporta
   if ('serviceWorker' in navigator && 'SyncManager' in window) {
     try {
       const reg = await navigator.serviceWorker.ready;
       await reg.sync.register('sync-activities');
     } catch (err) {
-      console.warn('Background Sync no disponible, se usará respaldo online:', err);
+      console.warn('Background Sync no disponible:', err);
     }
   }
 }
 
 async function processSyncQueue() {
-  if (!navigator.onLine) return;
+  if (!navigator.onLine || !db) return;
 
   const tx = db.transaction([STORE_SYNC_QUEUE], 'readonly');
-  const queueStore = tx.objectStore(STORE_SYNC_QUEUE);
-  const getAllReq = queueStore.getAll();
+  const getAllReq = tx.objectStore(STORE_SYNC_QUEUE).getAll();
 
   getAllReq.onsuccess = async () => {
     const pendingItems = getAllReq.result;
     if (pendingItems.length === 0) {
-      updateSyncBanner();
+      updateSyncUI();
       return;
     }
 
-    // Simulación de envío a API REST / Backend
-    console.log('Sincronizando cambios locales con el servidor...', pendingItems);
-    await new Promise((r) => setTimeout(r, 800));
+    await new Promise((r) => setTimeout(r, 600));
 
-    // Marcar actividades como sincronizadas en IndexedDB
     const activities = await getAllActivitiesDB();
     for (const act of activities) {
       if (act.pendingSync) {
@@ -116,33 +105,31 @@ async function processSyncQueue() {
       }
     }
 
-    // Vaciar cola de sincronización
     const clearTx = db.transaction([STORE_SYNC_QUEUE], 'readwrite');
     clearTx.objectStore(STORE_SYNC_QUEUE).clear();
 
     clearTx.oncomplete = () => {
-      updateSyncBanner();
-      renderActivities();
-      showLocalNotification('Sincronización completa', 'Tus actividades offline ya están respaldadas.');
+      updateSyncUI();
+      renderDashboard();
+      showLocalNotification('Sincronización completada', 'Tus cambios offline se han sincronizado.');
     };
   };
 }
 
-function updateSyncBanner() {
+function updateSyncUI() {
+  if (!db) return;
   const tx = db.transaction([STORE_SYNC_QUEUE], 'readonly');
   const countReq = tx.objectStore(STORE_SYNC_QUEUE).count();
   countReq.onsuccess = () => {
+    const count = countReq.result;
+    document.getElementById('stat-sync').textContent = count;
     const banner = document.getElementById('sync-banner');
-    if (countReq.result > 0) {
-      banner.classList.remove('hidden');
-    } else {
-      banner.classList.add('hidden');
-    }
+    banner.classList.toggle('hidden', count === 0);
   };
 }
 
 // ==========================================
-// 4. NOTIFICATIONS API & PUSH SUBSCRIPTION
+// 3. NOTIFICATIONS API & PUSH
 // ==========================================
 const btnNotify = document.getElementById('btn-notify-perm');
 
@@ -151,36 +138,30 @@ btnNotify.addEventListener('click', async () => {
     alert('Tu navegador no soporta notificaciones.');
     return;
   }
-
   const permission = await Notification.requestPermission();
   if (permission === 'granted') {
     btnNotify.textContent = '🔔 Avisos activos';
-    showLocalNotification('¡Recordatorios listos!', 'Te avisaremos cuando llegue la hora de tus actividades.');
+    showLocalNotification('¡Avisos activados!', 'Recibirás recordatorios cuando llegue la hora.');
     subscribeUserToPush();
-  } else {
-    alert('Permiso de notificaciones denegado.');
   }
 });
 
 function showLocalNotification(title, body) {
-  if (Notification.permission === 'granted') {
+  if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then((reg) => {
       reg.showNotification(title, {
         body,
-        icon: 'icon-192.png',
-        badge: 'icon-192.png',
-        vibrate: [150, 50, 150]
+        icon: './icon-192.png',
+        badge: './icon-192.png'
       });
     });
   }
 }
 
-// Ampliación: Suscripción a Push API para backend
 async function subscribeUserToPush() {
   if (!('PushManager' in window)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
-    // Reemplazar con tu llave pública VAPID generada en el backend (web-push)
     const applicationServerKey = urlBase64ToUint8Array(
       'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U'
     );
@@ -188,10 +169,9 @@ async function subscribeUserToPush() {
       userVisibleOnly: true,
       applicationServerKey
     });
-    console.log('Objeto PushSubscription listo para enviar al backend:', JSON.stringify(subscription));
-    // Aquí harías: fetch('/api/subscribe', { method: 'POST', body: JSON.stringify(subscription) })
+    console.log('PushSubscription:', JSON.stringify(subscription));
   } catch (err) {
-    console.log('Suscripción Push omitida (requiere llaves VAPID reales en producción):', err.message);
+    console.log('Push pendiente de llaves VAPID reales:', err.message);
   }
 }
 
@@ -199,15 +179,13 @@ function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const rawData = window.atob(base64);
-  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
 }
 
-// Revisar cada 30 segundos si alguna actividad venció para lanzar notificación
 setInterval(async () => {
   if (!db || Notification.permission !== 'granted') return;
   const activities = await getAllActivitiesDB();
   const now = new Date();
-
   for (const act of activities) {
     if (!act.completed && !act.notified && new Date(act.datetime) <= now) {
       showLocalNotification(`Recordatorio: ${act.title}`, act.notes || `Categoría: ${act.category}`);
@@ -218,10 +196,40 @@ setInterval(async () => {
 }, 30000);
 
 // ==========================================
-// 5. INTERFAZ DE USUARIO Y EVENTOS
+// 4. CRUD, VISTA PREVIA Y RENDERIZADO
 // ==========================================
 const form = document.getElementById('activity-form');
-const listContainer = document.getElementById('activities-list');
+const tbody = document.getElementById('activities-tbody');
+
+function updatePreview() {
+  const titleVal = document.getElementById('title').value.trim();
+  const dtVal = document.getElementById('datetime').value;
+  const catVal = document.getElementById('category').value;
+  const notesVal = document.getElementById('notes').value.trim();
+
+  document.getElementById('preview-title').textContent = titleVal || 'Tu próxima actividad';
+  document.getElementById('preview-body').textContent =
+    notesVal || 'Agrega una nota o descripción para mostrar en el recordatorio.';
+
+  const dateText = dtVal
+    ? new Date(dtVal).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
+    : 'Sin fecha asignada';
+
+  document.getElementById('preview-meta').textContent = `Categoría: ${catVal} • ${dateText}`;
+}
+
+['title', 'datetime', 'category', 'notes'].forEach((id) => {
+  document.getElementById(id).addEventListener('input', updatePreview);
+  document.getElementById(id).addEventListener('change', updatePreview);
+});
+
+document.getElementById('btn-preview').addEventListener('click', () => {
+  updatePreview();
+  showLocalNotification(
+    document.getElementById('preview-title').textContent,
+    document.getElementById('preview-body').textContent
+  );
+});
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -243,13 +251,12 @@ form.addEventListener('submit', async (e) => {
   };
 
   await saveActivityDB(activity);
-
   if (isOffline) {
     await enqueueSyncAction(isEditing ? 'UPDATE' : 'CREATE', activity);
   }
 
   resetForm();
-  renderActivities();
+  renderDashboard();
 });
 
 function resetForm() {
@@ -258,74 +265,90 @@ function resetForm() {
   document.getElementById('form-title').textContent = 'Nueva actividad';
   document.getElementById('btn-submit').textContent = 'Guardar actividad';
   document.getElementById('btn-cancel-edit').classList.add('hidden');
+  updatePreview();
 }
 
 document.getElementById('btn-cancel-edit').addEventListener('click', resetForm);
 
-async function renderActivities() {
-  const activities = await getAllActivitiesDB();
-  activities.sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+async function renderDashboard() {
+  const all = await getAllActivitiesDB();
+  all.sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
 
-  const filtered = activities.filter((act) => {
+  const completedCount = all.filter((a) => a.completed).length;
+  const pendingCount = all.filter((a) => !a.completed).length;
+
+  document.getElementById('stat-completed').textContent = completedCount;
+  document.getElementById('stat-pending').textContent = pendingCount;
+  document.getElementById('stat-total').textContent = all.length;
+
+  document.getElementById('badge-all').textContent = all.length;
+  document.getElementById('badge-pending').textContent = pendingCount;
+  document.getElementById('badge-completed').textContent = completedCount;
+
+  updateSyncUI();
+
+  const filtered = all.filter((act) => {
     if (currentFilter === 'pending') return !act.completed;
     if (currentFilter === 'completed') return act.completed;
     return true;
   });
 
   if (filtered.length === 0) {
-    listContainer.innerHTML = `
-      <div class="empty-state">
-        <p>No hay actividades en esta vista. ¡Disfruta tu tranquilidad o agrega una arriba!</p>
-      </div>`;
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="empty-row">No hay actividades en este filtro. ¡Agrega una desde el formulario!</td>
+      </tr>`;
     return;
   }
 
-  listContainer.innerHTML = filtered
-    .map((act) => {
-      const dateFormatted = new Date(act.datetime).toLocaleString('es-MX', {
-        dateStyle: 'medium',
+  tbody.innerHTML = filtered
+    .map((act, idx) => {
+      const dtFmt = new Date(act.datetime).toLocaleString('es-MX', {
+        dateStyle: 'short',
         timeStyle: 'short'
       });
+      const statusBadge = act.completed
+        ? '<span class="badge status-done">Completada</span>'
+        : act.pendingSync
+        ? '<span class="badge status-pending">Pendiente sync</span>'
+        : '<span class="badge status-pending">Pendiente</span>';
 
       return `
-      <article class="activity-item ${act.completed ? 'completed' : ''}">
-        <div>
-          <div class="activity-meta">
-            <span class="tag-cat">${act.category}</span>
-            ${act.pendingSync ? '<span class="tag-sync">⏳ Pendiente de sincronizar</span>' : ''}
+      <tr class="${act.completed ? 'row-completed' : ''}">
+        <td>${idx + 1}</td>
+        <td>${dtFmt}</td>
+        <td><strong>${escapeHTML(act.title)}</strong></td>
+        <td><span class="tag-pill">${escapeHTML(act.category)}</span></td>
+        <td>${escapeHTML(act.notes || '—')}</td>
+        <td>${statusBadge}</td>
+        <td class="td-right">
+          <div class="action-btns">
+            <button class="btn-icon btn-icon-check" onclick="toggleComplete('${act.id}')" title="Completar">
+              ${act.completed ? '↩' : '✓'}
+            </button>
+            <button class="btn-icon btn-icon-edit" onclick="editActivity('${act.id}')" title="Editar">✎</button>
+            <button class="btn-icon btn-icon-del" onclick="removeActivity('${act.id}')" title="Eliminar">🗑</button>
           </div>
-          <h3 class="activity-title">${escapeHTML(act.title)}</h3>
-          ${act.notes ? `<p class="activity-notes">${escapeHTML(act.notes)}</p>` : ''}
-          <span class="activity-time">🕒 ${dateFormatted}</span>
-        </div>
-        <div class="item-actions">
-          <button class="icon-btn" onclick="toggleComplete('${act.id}')" title="Completar">
-            ${act.completed ? '↩️' : '✅'}
-          </button>
-          <button class="icon-btn" onclick="editActivity('${act.id}')" title="Editar">✏️</button>
-          <button class="icon-btn delete" onclick="removeActivity('${act.id}')" title="Eliminar">🗑️</button>
-        </div>
-      </article>`;
+        </td>
+      </tr>`;
     })
     .join('');
 }
 
 window.toggleComplete = async (id) => {
-  const activities = await getAllActivitiesDB();
-  const act = activities.find((item) => item.id === id);
+  const all = await getAllActivitiesDB();
+  const act = all.find((x) => x.id === id);
   if (!act) return;
-
   act.completed = !act.completed;
   act.pendingSync = !navigator.onLine;
   await saveActivityDB(act);
-
   if (!navigator.onLine) await enqueueSyncAction('UPDATE', act);
-  renderActivities();
+  renderDashboard();
 };
 
 window.editActivity = async (id) => {
-  const activities = await getAllActivitiesDB();
-  const act = activities.find((item) => item.id === id);
+  const all = await getAllActivitiesDB();
+  const act = all.find((x) => x.id === id);
   if (!act) return;
 
   document.getElementById('activity-id').value = act.id;
@@ -335,28 +358,38 @@ window.editActivity = async (id) => {
   document.getElementById('notes').value = act.notes;
 
   document.getElementById('form-title').textContent = 'Editar actividad';
-  document.getElementById('btn-submit').textContent = 'Actualizar cambios';
+  document.getElementById('btn-submit').textContent = 'Actualizar';
   document.getElementById('btn-cancel-edit').classList.remove('hidden');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  updatePreview();
+  window.scrollTo({ top: document.querySelector('.bottom-grid').offsetTop - 20, behavior: 'smooth' });
 };
 
 window.removeActivity = async (id) => {
   await deleteActivityDB(id);
   if (!navigator.onLine) await enqueueSyncAction('DELETE', { id });
-  renderActivities();
+  renderDashboard();
 };
 
-// Filtros
-document.querySelectorAll('.filter-btn').forEach((btn) => {
+document.getElementById('btn-clear-completed').addEventListener('click', async () => {
+  const all = await getAllActivitiesDB();
+  for (const act of all) {
+    if (act.completed) {
+      await deleteActivityDB(act.id);
+      if (!navigator.onLine) await enqueueSyncAction('DELETE', { id: act.id });
+    }
+  }
+  renderDashboard();
+});
+
+document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     currentFilter = btn.dataset.filter;
-    renderActivities();
+    renderDashboard();
   });
 });
 
-// Estado de red (Online / Offline)
 function updateOnlineStatus() {
   const badge = document.getElementById('connection-badge');
   if (navigator.onLine) {
@@ -374,19 +407,23 @@ window.addEventListener('offline', updateOnlineStatus);
 document.getElementById('btn-force-sync').addEventListener('click', processSyncQueue);
 
 function escapeHTML(str) {
-  return str.replace(/[&<>'"]/g, (tag) => ({
+  return String(str).replace(/[&<>'"]/g, (tag) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[tag]));
 }
 
-// ==========================================
-// 6. REGISTRO DEL SERVICE WORKER E INICIO
-// ==========================================
 window.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('current-date-label').textContent = new Date().toLocaleDateString('es-MX', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
   await initDB();
   updateOnlineStatus();
-  updateSyncBanner();
-  renderActivities();
+  renderDashboard();
+  updatePreview();
 
   if (Notification.permission === 'granted') {
     btnNotify.textContent = '🔔 Avisos activos';
@@ -395,7 +432,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   if ('serviceWorker' in navigator) {
     try {
       await navigator.serviceWorker.register('./sw.js');
-      console.log('Service Worker registrado con éxito');
     } catch (err) {
       console.error('Error al registrar Service Worker:', err);
     }
