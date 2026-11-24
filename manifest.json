@@ -1,11 +1,11 @@
 {
-  "name": "Aura — Actividades y Recordatorios",
+  "name": "Aura — Mi Agenda",
   "short_name": "Aura PWA",
-  "description": "Gestor cálido y offline de actividades y recordatorios personales.",
+  "description": "Gestor de actividades y recordatorios personales.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#FAF6F0",
-  "theme_color": "#D97757",
+  "theme_color": "#7C5DFA",
   "orientation": "portrait-primary",
   "icons": [
     {

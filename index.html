@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#7C5DFA" />
   <meta name="description" content="Panel de actividades y recordatorios personales con soporte offline." />
-  <title>Mi Agenda | Recordatorios y Actividades</title>
+  <title>Mi Agenda</title>
+  <link rel="icon" href="favicon.ico" sizes="any" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -22,7 +23,6 @@
           <div class="avatar-mark">MA</div>
           <div>
             <div class="profile-name">Mi Agenda</div>
-            <div class="profile-sub">Espacio personal</div>
           </div>
         </div>
 
@@ -39,11 +39,19 @@
         </nav>
 
         <div class="side-status-card">
-          <div class="status-label">Estado de red</div>
-          <span id="connection-badge" class="badge badge-online" aria-live="polite">En línea</span>
-          <button id="btn-notify-perm" class="btn btn-soft-full" type="button">
-            🔔 Activar avisos
-          </button>
+          <div class="status-row">
+            <span id="connection-dot" class="status-dot dot-online" aria-hidden="true"></span>
+            <span id="connection-badge" class="status-text" aria-live="polite">En línea</span>
+            <button
+              id="btn-notify-perm"
+              class="bell-toggle"
+              type="button"
+              aria-label="Activar notificaciones"
+              title="Activar notificaciones"
+            >
+              🔔
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -51,7 +59,7 @@
       <main class="main-panel">
         <header class="top-bar">
           <div>
-            <h1>Recordatorios y Actividades</h1>
+            <h1>Mis Actividades</h1>
             <p id="current-date-label" class="muted-text"></p>
           </div>
           <div id="sync-banner" class="sync-inline hidden" role="status">
@@ -60,7 +68,7 @@
           </div>
         </header>
 
-        <!-- Tarjetas de resumen (como "Today's Appointments") -->
+        <!-- Tarjetas de resumen -->
         <section class="metrics-section" aria-label="Resumen de actividades">
           <h2 class="section-title">Resumen de hoy</h2>
           <div class="metrics-grid">
@@ -98,7 +106,7 @@
           </div>
         </section>
 
-        <!-- Tabla de actividades (como "Manage Custom Notifications") -->
+        <!-- Tabla de actividades  -->
         <section class="table-section" aria-labelledby="table-heading">
           <div class="section-header-row">
             <div>
@@ -172,23 +180,22 @@
             </form>
           </div>
 
-          <div class="panel-box preview-box">
-            <h2 class="box-title">Vista previa del recordatorio</h2>
-            <p class="muted-text small mb-1">Así se verá tu aviso cuando llegue la hora</p>
+          <div class="panel-box">
+            <h2 class="box-title">Calendario de actividades</h2>
+            <p class="muted-text small mb-1">Tus recordatorios programados por día</p>
 
-            <div class="notif-mockup">
-              <div class="notif-mockup-header">
-                <span class="notif-dot"></span>
-                <strong>Mi Agenda • Notificación</strong>
+            <div class="cal-wrap">
+              <div class="cal-header">
+                <span id="cal-month-label" class="cal-title"></span>
+                <div class="cal-nav-btns">
+                  <button id="btn-cal-prev" class="cal-nav" type="button" aria-label="Mes anterior">‹</button>
+                  <button id="btn-cal-next" class="cal-nav" type="button" aria-label="Mes siguiente">›</button>
+                </div>
               </div>
-              <div id="preview-title" class="notif-mockup-title">Tu próxima actividad</div>
-              <div id="preview-body" class="notif-mockup-body">Selecciona una fecha y escribe un título para previsualizar el aviso.</div>
-              <div id="preview-meta" class="notif-mockup-meta">Categoría: Personal</div>
+              <div class="cal-grid" id="cal-grid"></div>
+              <div id="day-activities" class="day-list"></div>
             </div>
 
-            <div class="helper-tip">
-              💡 Tip: Puedes desconectar el internet en DevTools para probar el guardado offline y la sincronización automática.
-            </div>
           </div>
         </section>
       </main>
